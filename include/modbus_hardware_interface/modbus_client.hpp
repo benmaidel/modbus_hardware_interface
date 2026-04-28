@@ -475,10 +475,11 @@ class ModbusClient
 {
 public:
   explicit ModbusClient(
-    const std::string & ip_address, const int & port, const bool & persistent_connection = true,
-    modbus_t * modbus_connection = nullptr)
+    const std::string & ip_address, const int & port, const int & device_id = 0,
+    const bool & persistent_connection = true, modbus_t * modbus_connection = nullptr)
   : ip_address_(ip_address),
     port_(port),
+    device_id_(device_id),
     persistent_connection_(persistent_connection),
     modbus_connection_(modbus_connection)
   {
@@ -510,6 +511,18 @@ public:
           rclcpp::get_logger("ModbusConnection"), "Unable to create the libmodbus context");
         disconnect();
         return false;
+      }
+
+      if (device_id_ != 0)
+      {
+        if (modbus_set_slave(modbus_connection_, device_id_) == -1)
+        {
+          RCLCPP_ERROR(
+            rclcpp::get_logger("ModbusConnection"), "Failed to set device ID (slave ID): %s",
+            modbus_strerror(errno));
+          disconnect();
+          return false;
+        }
       }
 
       if (modbus_connect(modbus_connection_) == -1)
@@ -559,6 +572,21 @@ public:
     {
       throw std::runtime_error(
         "ModbusClient: Error while reading raw register. The given read function [" + read_fn +
+        "] is not defined for registers");
+    }
+  }
+
+  void write_raw_register(ModbusInterfaceWriteConfig & config, const std::vector<uint16_t> & values)
+  {
+    const std::string write_fn = config.write_function();
+    if (write_fn == REGISTER)
+    {
+      write_register(config.get_register_address(), values);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "ModbusClient: Error while writing raw register. The given write function [" + write_fn +
         "] is not defined for registers");
     }
   }
@@ -615,10 +643,10 @@ public:
     }
   }
 
-private:
+protected:
   std::vector<uint8_t> read_bits(const int & register_address, const int & number_of_bits = 1)
   {
-    std::vector<uint8_t> bits(number_of_bits);
+    std::vector<uint8_t> bits(static_cast<std::size_t>(number_of_bits));
     int rc = modbus_read_bits(modbus_connection_, register_address, number_of_bits, bits.data());
     if (rc == -1)
     {
@@ -635,7 +663,7 @@ private:
 
   std::vector<uint8_t> read_input_bits(const int & register_address, const int & number_of_bits = 1)
   {
-    std::vector<uint8_t> bits(number_of_bits);
+    std::vector<uint8_t> bits(static_cast<std::size_t>(number_of_bits));
     int rc =
       modbus_read_input_bits(modbus_connection_, register_address, number_of_bits, bits.data());
     if (rc == -1)
@@ -654,7 +682,7 @@ private:
   std::vector<uint16_t> read_register(
     const int & register_address, const int & number_of_registers = 2)
   {
-    std::vector<uint16_t> reg_dest(number_of_registers);
+    std::vector<uint16_t> reg_dest(static_cast<std::size_t>(number_of_registers));
     int rc = modbus_read_registers(
       modbus_connection_, register_address, number_of_registers, reg_dest.data());
     if (rc == -1)
@@ -673,7 +701,7 @@ private:
   std::vector<uint16_t> read_input_register(
     const int & register_address, const int & number_of_registers = 2)
   {
-    std::vector<uint16_t> reg_dest(number_of_registers);
+    std::vector<uint16_t> reg_dest(static_cast<std::size_t>(number_of_registers));
     int rc = modbus_read_input_registers(
       modbus_connection_, register_address, number_of_registers, reg_dest.data());
     if (rc == -1)
@@ -728,6 +756,7 @@ private:
   // Private members
   std::string ip_address_;
   int port_;
+  int device_id_;
   bool persistent_connection_;
   modbus_t * modbus_connection_;
 };

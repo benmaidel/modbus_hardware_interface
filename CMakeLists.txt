@@ -29,6 +29,7 @@ add_library(
   modbus_hardware_interface
   SHARED
   src/modbus_hardware_interface.cpp
+  src/flexisoft_hardware_interface.cpp
 )
 target_include_directories(
   modbus_hardware_interface
