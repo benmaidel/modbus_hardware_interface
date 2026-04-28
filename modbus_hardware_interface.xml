@@ -5,7 +5,15 @@
          base_class_type="hardware_interface::SystemInterface">
     <description>
       ros2_control hardware interface for the servo motor controlled via the modbus protocol.
-        </description>
+    </description>
   </class>
+  <class name="modbus_hardware_interface/FlexisoftHardwareInterface"
+         type="modbus_hardware_interface::FlexisoftHardwareInterface"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Generic hardware interface for Flexisoft Modbus Devices in ros2_control.
+    </description>
+  </class>
+
 </library>
 s

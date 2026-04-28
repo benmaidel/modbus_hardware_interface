@@ -131,7 +131,7 @@ protected:
   std::unordered_map<std::string, ModbusInterfaceWriteConfig> command_interface_to_config_;
   std::unordered_map<std::string, double> state_interface_to_states_;
   std::unordered_map<std::string, double> command_interface_to_commands_;
-  std::unique_ptr<ModbusClient> client_;
+  std::shared_ptr<ModbusClient> client_;
 };
 
 }  // namespace modbus_hardware_interface

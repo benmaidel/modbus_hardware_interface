@@ -16,6 +16,7 @@
 #include "modbus_hardware_interface/modbus_exceptions.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -70,6 +71,33 @@ hardware_interface::CallbackReturn ModbusHardwareInterface::on_init(
     return CallbackReturn::ERROR;
   }
 
+  // Get device ID (slave ID) of the modbus client
+  // 0 means no slave id is set and modbus_set_slave is not called
+  int device_id = 0;
+  if (info_.hardware_parameters.find("modbus_device_id") != info_.hardware_parameters.end())
+  {
+    try
+    {
+      device_id = std::stoi(info_.hardware_parameters["modbus_device_id"]);
+    }
+    catch (const std::invalid_argument & e)
+    {
+      RCLCPP_ERROR_STREAM(
+        rclcpp::get_logger("ModbusHardwareInterface"),
+        "ModbusHardwareInterface: Error while getting device ID for Hardware [" + info.name + "] " +
+          e.what());
+      return CallbackReturn::ERROR;
+    }
+    catch (const std::out_of_range & e)
+    {
+      RCLCPP_ERROR_STREAM(
+        rclcpp::get_logger("ModbusHardwareInterface"),
+        "ModbusHardwareInterface: Error while getting device ID for Hardware[" + info.name + "] " +
+          e.what());
+      return CallbackReturn::ERROR;
+    }
+  }
+
   // Get connection type (persistent/not persistent) of the modbus client
   // persistent -> we establish connection once and try to hold it the entire time
   // non persistent -> we establish connection before each read/write and then disconnect
@@ -90,8 +118,8 @@ hardware_interface::CallbackReturn ModbusHardwareInterface::on_init(
     use_persistent_connection = hardware_interface::parse_bool(use_persistent_connection_str);
   }
 
-  client_ =
-    std::make_unique<ModbusClient>(modbus_server_ip, modbus_server_port, use_persistent_connection);
+  client_ = std::make_shared<ModbusClient>(
+    modbus_server_ip, modbus_server_port, device_id, use_persistent_connection);
 
   // initialize the configurations for each command and state/interface of each joint
   for (hardware_interface::ComponentInfo & joint : info_.joints)
