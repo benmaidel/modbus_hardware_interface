@@ -188,6 +188,17 @@ std::vector<hardware_interface::StateInterface> ModbusHardwareInterface::export_
     }
   }
 
+  // gpios
+  for (const auto & gpio : info_.gpios)
+  {
+    for (const auto & state_interface : gpio.state_interfaces)
+    {
+      std::string state_interface_name = gpio.name + "/" + state_interface.name;
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        gpio.name, state_interface.name, &state_interface_to_states_[state_interface_name]));
+    }
+  }
+
   return state_interfaces;
 }
 
@@ -202,6 +213,17 @@ ModbusHardwareInterface::export_command_interfaces()
       std::string command_interface_name = joint.name + "/" + command_interface.name;
       command_interfaces.emplace_back(hardware_interface::CommandInterface(
         joint.name, command_interface.name,
+        &command_interface_to_commands_[command_interface_name]));
+    }
+  }
+
+  for (const auto & gpio : info_.gpios)
+  {
+    for (const auto & command_interface : gpio.command_interfaces)
+    {
+      std::string command_interface_name = gpio.name + "/" + command_interface.name;
+      command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        gpio.name, command_interface.name,
         &command_interface_to_commands_[command_interface_name]));
     }
   }
@@ -387,6 +409,7 @@ void ModbusHardwareInterface::read_component_info(hardware_interface::ComponentI
     command_interface_to_config_.insert(std::make_pair(
       command_interface_name,
       create_config<ModbusInterfaceWriteConfig>(command_interface, write_function)));
+    command_interface_to_config_.at(command_interface_name).write_this_interface(true);
     RCLCPP_INFO_STREAM(
       rclcpp::get_logger("ModbusHardwareInterface"),
       "Added command interface: " << command_interface_name);
