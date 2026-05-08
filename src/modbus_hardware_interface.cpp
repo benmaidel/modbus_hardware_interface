@@ -121,62 +121,28 @@ hardware_interface::CallbackReturn ModbusHardwareInterface::on_init(
   client_ = std::make_shared<ModbusClient>(
     modbus_server_ip, modbus_server_port, device_id, use_persistent_connection);
 
-  // initialize the configurations for each command and state/interface of each joint
-  for (hardware_interface::ComponentInfo & joint : info_.joints)
+  // initialize the configurations for each command and state interface
+  for (auto & component : info_.joints)
   {
-    // get parameters for each StateInterface
-    for (auto & state_interface : joint.state_interfaces)
-    {
-      std::string state_interface_name = joint.name + "/" + state_interface.name;
-      // initialize with no command received
-      state_interface_to_states_[state_interface_name] = NO_CMD;
-      // Not used with modbus
-      if (state_interface.parameters["register"].empty())
-      {
-        continue;
-      }
-      // read_function, set to default if not provided
-      std::string read_function = state_interface.parameters["read_function"];
-      if (read_function.empty())
-      {
-        RCLCPP_WARN_STREAM(
-          rclcpp::get_logger("ModbusHardwareInterface"),
-          "read_function is empty for interface[" + state_interface_name + "]. Use '"
-            << READ_FUNCTION_DEFAULT << "' as default.");
-        read_function = READ_FUNCTION_DEFAULT;
-      }
-      state_interface_to_config_.insert(std::make_pair(
-        state_interface_name,
-        create_config<ModbusInterfaceReadConfig>(state_interface, read_function)));
-    }
-
-    // get parameters for each CommandInterface
-    for (auto & command_interface : joint.command_interfaces)
-    {
-      std::string command_interface_name = joint.name + "/" + command_interface.name;
-
-      // set initial to no command
-      command_interface_to_commands_[command_interface_name] = NO_CMD;
-      // Not used with modbus
-      if (command_interface.parameters["register"].empty())
-      {
-        continue;
-      }
-      // write_function, set to default if not provided
-      std::string write_function = command_interface.parameters["write_function"];
-      if (write_function.empty())
-      {
-        RCLCPP_WARN_STREAM(
-          rclcpp::get_logger("ModbusHardwareInterface"),
-          "write_function is empty for interface[" + command_interface_name + "]. Use '"
-            << WRITE_FUNCTION_DEFAULT << "' as default.");
-        write_function = WRITE_FUNCTION_DEFAULT;
-      }
-      command_interface_to_config_.insert(std::make_pair(
-        command_interface_name,
-        create_config<ModbusInterfaceWriteConfig>(command_interface, write_function)));
-    }
+    read_component_info(component);
   }
+  for (auto & component : info_.sensors)
+  {
+    read_component_info(component);
+  }
+  for (auto & component : info_.gpios)
+  {
+    read_component_info(component);
+  }
+
+  if (info_.joints.empty() && info_.sensors.empty() && info_.gpios.empty())
+  {
+    RCLCPP_ERROR_STREAM(
+      rclcpp::get_logger("ModbusHardwareInterface"),
+      "No joints, sensors, or gpios configured for hardware interface.");
+    return CallbackReturn::ERROR;
+  }
+
   RCLCPP_DEBUG_STREAM(rclcpp::get_logger("ModbusHardwareInterface"), "Finished `on_init`!");
 
   return CallbackReturn::SUCCESS;
@@ -360,6 +326,71 @@ hardware_interface::CallbackReturn ModbusHardwareInterface::on_error(
     ret = CallbackReturn::ERROR;
   }
   return ret;
+}
+
+void ModbusHardwareInterface::read_component_info(hardware_interface::ComponentInfo & component)
+{
+  if (component.state_interfaces.empty())
+  {
+    RCLCPP_WARN_STREAM(
+      rclcpp::get_logger("ModbusHardwareInterface"),
+      "Component '" << component.name << "' has no state interfaces.");
+  }
+  for (auto & state_interface : component.state_interfaces)
+  {
+    std::string state_interface_name = component.name + "/" + state_interface.name;
+    state_interface_to_states_[state_interface_name] = NO_CMD;
+    if (state_interface.parameters["register"].empty())
+    {
+      continue;
+    }
+    std::string read_function = state_interface.parameters["read_function"];
+    if (read_function.empty())
+    {
+      RCLCPP_WARN_STREAM(
+        rclcpp::get_logger("ModbusHardwareInterface"),
+        "read_function is empty for interface[" + state_interface_name + "]. Use '"
+          << READ_FUNCTION_DEFAULT << "' as default.");
+      read_function = READ_FUNCTION_DEFAULT;
+    }
+    state_interface_to_config_.insert(std::make_pair(
+      state_interface_name,
+      create_config<ModbusInterfaceReadConfig>(state_interface, read_function)));
+    RCLCPP_INFO_STREAM(
+      rclcpp::get_logger("ModbusHardwareInterface"),
+      "Added state interface: " << state_interface_name);
+  }
+
+  if (component.command_interfaces.empty())
+  {
+    RCLCPP_WARN_STREAM(
+      rclcpp::get_logger("ModbusHardwareInterface"),
+      "Component '" << component.name << "' has no command interfaces.");
+  }
+  for (auto & command_interface : component.command_interfaces)
+  {
+    std::string command_interface_name = component.name + "/" + command_interface.name;
+    command_interface_to_commands_[command_interface_name] = NO_CMD;
+    if (command_interface.parameters["register"].empty())
+    {
+      continue;
+    }
+    std::string write_function = command_interface.parameters["write_function"];
+    if (write_function.empty())
+    {
+      RCLCPP_WARN_STREAM(
+        rclcpp::get_logger("ModbusHardwareInterface"),
+        "write_function is empty for interface[" + command_interface_name + "]. Use '"
+          << WRITE_FUNCTION_DEFAULT << "' as default.");
+      write_function = WRITE_FUNCTION_DEFAULT;
+    }
+    command_interface_to_config_.insert(std::make_pair(
+      command_interface_name,
+      create_config<ModbusInterfaceWriteConfig>(command_interface, write_function)));
+    RCLCPP_INFO_STREAM(
+      rclcpp::get_logger("ModbusHardwareInterface"),
+      "Added command interface: " << command_interface_name);
+  }
 }
 
 template <typename T>

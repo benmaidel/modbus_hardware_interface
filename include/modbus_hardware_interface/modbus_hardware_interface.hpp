@@ -113,6 +113,13 @@ protected:
     hardware_interface::InterfaceInfo & interface, const std::string & access_function);
 
   /**
+   * Parse and process component information to extract modbus interface configurations.
+   *
+   * \param[in] component the component info containing state and command interfaces
+   */
+  void read_component_info(hardware_interface::ComponentInfo & component);
+
+  /**
    * Check if the connection to the modbus server is established. If not try to initialize it.
    *
    * \return returns true if connected or connection to modbus server could be established.
