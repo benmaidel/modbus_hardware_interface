@@ -160,7 +160,12 @@ private:
     std::unique_lock<std::mutex> lk(loop_mutex_);
     while (running_.load())
     {
-      cv_.wait_until(lk, next_cycle_time, [this]() { return !running_.load() || !pending_write_cache_.empty(); });
+      // Sleep until the next cycle. Only wake early for shutdown -- writes are
+      // rate-limited to cycle_period_ and processed at the cycle boundary, so we
+      // must NOT wake on pending writes: doing so makes wait_until return
+      // immediately (predicate already true, cache not yet drained), which spins
+      // the loop on steady_clock::now() until the cycle time arrives.
+      cv_.wait_until(lk, next_cycle_time, [this]() { return !running_.load(); });
       if (!running_.load())
       {
         break;
@@ -169,7 +174,7 @@ private:
       auto now = std::chrono::steady_clock::now();
       if (now < next_cycle_time)
       {
-        // Woken by write request but not yet time for next cycle -> continue waiting
+        // Spurious wakeup before the cycle is due -> keep waiting
         continue;
       }
 
