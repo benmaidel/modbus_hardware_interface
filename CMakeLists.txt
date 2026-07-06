@@ -51,6 +51,7 @@ pluginlib_export_plugin_description_file(
 if(BUILD_TESTING)
   find_package(ament_cmake_gmock REQUIRED)
   find_package(ros2_control_test_assets REQUIRED)
+  find_package(lifecycle_msgs REQUIRED)
 
   ament_add_gmock(test_modbus_hardware_interface test/test_modbus_hardware_interface.cpp)
   target_include_directories(test_modbus_hardware_interface PRIVATE include)
@@ -58,6 +59,7 @@ if(BUILD_TESTING)
     test_modbus_hardware_interface
     ${THIS_PACKAGE_INCLUDE_DEPENDS}
     ros2_control_test_assets
+    lifecycle_msgs
   )
 
 endif()

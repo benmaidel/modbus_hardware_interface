@@ -14,15 +14,43 @@
 
 #include <gmock/gmock.h>
 
+#include <memory>
 #include <string>
 
 #include "hardware_interface/resource_manager.hpp"
+#include "hardware_interface/types/lifecycle_state_names.hpp"
+#include "lifecycle_msgs/msg/state.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_lifecycle/state.hpp"
 #include "ros2_control_test_assets/components_urdfs.hpp"
 #include "ros2_control_test_assets/descriptions.hpp"
 
 class TestModbusHardwareInterface : public ::testing::Test
 {
 protected:
+  static void SetUpTestSuite()
+  {
+    if (!rclcpp::ok())
+    {
+      rclcpp::init(0, nullptr);
+    }
+  }
+
+  static void TearDownTestSuite()
+  {
+    if (rclcpp::ok())
+    {
+      rclcpp::shutdown();
+    }
+  }
+
+  hardware_interface::ResourceManager make_resource_manager(const std::string & urdf)
+  {
+    return hardware_interface::ResourceManager(
+      urdf, std::make_shared<rclcpp::Clock>(RCL_ROS_TIME),
+      rclcpp::get_logger("test_modbus_hardware_interface"));
+  }
+
   void SetUp() override
   {
     // TODO(anyone): Extend this description to your robot
@@ -72,5 +100,25 @@ TEST_F(TestModbusHardwareInterface, load_modbus_hardware_interface_2dof)
 {
   auto urdf = ros2_control_test_assets::urdf_head + valid_modbus_hardware +
               ros2_control_test_assets::urdf_tail;
-  ASSERT_NO_THROW(hardware_interface::ResourceManager rm(urdf));
+  ASSERT_NO_THROW(make_resource_manager(urdf));
+}
+
+// When the modbus server is unreachable, configuring/activating the component must NOT throw.
+// Otherwise a failed lifecycle transition during forced startup activation aborts the whole
+// ros2_control_node. The interface is expected to come up and reconnect in the read/write cycle.
+TEST_F(TestModbusHardwareInterface, configure_and_activate_succeeds_when_server_unreachable)
+{
+  // Port 1234 in the URDF above points at a server that is not running in this test.
+  auto urdf = ros2_control_test_assets::urdf_head + valid_modbus_hardware +
+              ros2_control_test_assets::urdf_tail;
+  auto rm = make_resource_manager(urdf);
+
+  rclcpp_lifecycle::State active_state(
+    lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE,
+    hardware_interface::lifecycle_state_names::ACTIVE);
+
+  EXPECT_NO_THROW({
+    auto ret = rm.set_component_state("ModbusHardwareInterface2dof", active_state);
+    EXPECT_EQ(ret, hardware_interface::return_type::OK);
+  });
 }

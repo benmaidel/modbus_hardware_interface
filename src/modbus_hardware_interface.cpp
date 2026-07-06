@@ -155,10 +155,13 @@ hardware_interface::CallbackReturn ModbusHardwareInterface::on_configure(
   {
     if (!client_->connect())
     {
-      RCLCPP_ERROR_STREAM(
+      // Do not fail configuration just because the device is currently unreachable: that would
+      // abort the whole ros2_control_node when it forces the component to its 'active' initial
+      // state at startup. Come up regardless and reconnect lazily in the read/write cycle.
+      RCLCPP_WARN_STREAM(
         rclcpp::get_logger("ModbusHardwareInterface"),
-        "could not establish connection to modbus server.");
-      return CallbackReturn::ERROR;
+        "could not establish connection to modbus server. Will keep retrying in the read/write "
+        "cycle.");
     }
   }
   return CallbackReturn::SUCCESS;
@@ -268,7 +271,13 @@ hardware_interface::return_type ModbusHardwareInterface::read(
 {
   if (!connection_established())
   {
-    return hardware_interface::return_type::ERROR;
+    // Device unreachable: skip this cycle and keep the last known state instead of tearing the
+    // component down. connection_established() retries the connection on the next cycle.
+    static rclcpp::Clock throttle_clock;
+    RCLCPP_WARN_STREAM_THROTTLE(
+      rclcpp::get_logger("ModbusHardwareInterface"), throttle_clock, 5000,
+      "No connection to modbus server, skipping read.");
+    return hardware_interface::return_type::OK;
   }
   for (auto & [name, config] : state_interface_to_config_)
   {
@@ -295,7 +304,13 @@ hardware_interface::return_type ModbusHardwareInterface::write(
 {
   if (!connection_established())
   {
-    return hardware_interface::return_type::ERROR;
+    // Device unreachable: skip this cycle instead of tearing the component down.
+    // connection_established() retries the connection on the next cycle.
+    static rclcpp::Clock throttle_clock;
+    RCLCPP_WARN_STREAM_THROTTLE(
+      rclcpp::get_logger("ModbusHardwareInterface"), throttle_clock, 5000,
+      "No connection to modbus server, skipping write.");
+    return hardware_interface::return_type::OK;
   }
 
   for (const auto & [name, config] : command_interface_to_config_)
@@ -491,7 +506,9 @@ bool ModbusHardwareInterface::connection_established() const
 {
   if (client_->is_persistent_connection())
   {
-    return client_->connected();
+    // Reconnect if the persistent connection dropped (or was never established because the
+    // device was unreachable at configure time) so the interface self-heals.
+    return client_->connected() || client_->connect();
   }
   return client_->connect();
 }
