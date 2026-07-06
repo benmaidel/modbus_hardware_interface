@@ -37,7 +37,13 @@ hardware_interface::return_type FlexisoftHardwareInterface::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   if (!connection_established()) {
-    return hardware_interface::return_type::ERROR;
+    // Device unreachable: skip this cycle and keep the last known state instead of tearing the
+    // component down. connection_established() retries the connection on the next cycle.
+    static rclcpp::Clock throttle_clock;
+    RCLCPP_WARN_STREAM_THROTTLE(
+      rclcpp::get_logger("FlexisoftHardwareInterface"), throttle_clock, 5000,
+      "No connection to modbus server, skipping read.");
+    return hardware_interface::return_type::OK;
   }
 
   std::vector<uint16_t> raw_data;
@@ -89,7 +95,13 @@ hardware_interface::return_type FlexisoftHardwareInterface::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   if (!connection_established()) {
-    return hardware_interface::return_type::ERROR;
+    // Device unreachable: skip this cycle instead of tearing the component down.
+    // connection_established() retries the connection on the next cycle.
+    static rclcpp::Clock throttle_clock;
+    RCLCPP_WARN_STREAM_THROTTLE(
+      rclcpp::get_logger("FlexisoftHardwareInterface"), throttle_clock, 5000,
+      "No connection to modbus server, skipping write.");
+    return hardware_interface::return_type::OK;
   }
 
   std::vector<uint16_t> raw_data(5, 0); // 5 registers
